@@ -50,5 +50,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="exports.def" />
+    <None Include="cpp.hint" />
   </ItemGroup>
 </Project>

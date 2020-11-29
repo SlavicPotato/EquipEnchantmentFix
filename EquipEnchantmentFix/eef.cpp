@@ -23,14 +23,16 @@ namespace EEF
     SKMP_FORCEINLINE static bool HasItemAbility(Actor* a_actor, TESForm* a_form, EnchantmentItem* a_enchantment)
     {
         auto effects = a_actor->magicTarget.GetActiveEffects();
-
-        UInt32 numEffects = effects->Count();
-        if (!numEffects)
+        if (!effects)
             return false;
 
-        for (UInt32 i = 0; i < numEffects; i++)
+        auto numEffects = effects->Count();
+        for (decltype(numEffects) i = 0; i < numEffects; i++)
         {
             auto effect = effects->GetNthItem(i);
+            if (!effect)
+                continue;
+
             if (effect->sourceItem != a_form)
                 continue;
 
@@ -41,7 +43,7 @@ namespace EEF
         return false;
     }
 
-    SKMP_FORCEINLINE static void HandleEquipEvent(TESEquipEvent* a_evn)
+    void EquipEventHandler::HandleEvent(TESEquipEvent* a_evn)
     {
         class MatchForm :
             public FormMatcher
@@ -98,7 +100,7 @@ namespace EEF
         -> EventResult
     {
         if (a_evn)
-            HandleEquipEvent(a_evn);
+            HandleEvent(a_evn);
 
         return kEvent_Continue;
     }

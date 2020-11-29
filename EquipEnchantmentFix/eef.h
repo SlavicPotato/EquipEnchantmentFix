@@ -14,6 +14,11 @@ namespace EEF
             static EquipEventHandler handler;
             return &handler;
         }
+
+    private:
+
+        SKMP_FORCEINLINE void HandleEvent(TESEquipEvent* a_evn);
+
     };
 
     bool Initialize();
