@@ -2,16 +2,19 @@
 
 namespace SKSE
 {
+    constexpr size_t MAX_TRAMPOLINE_BRANCH = 64;
+
     constexpr UInt32 MIN_MESSAGING_INTERFACE_VERSION = 2;
 
     PluginHandle g_pluginHandle = kPluginHandle_Invalid;
 
     SKSEMessagingInterface* g_messaging;
+    SKSETaskInterface* g_taskInterface;
 
     bool Query(const SKSEInterface* a_skse, PluginInfo* a_info)
     {
         gLog.OpenRelative(CSIDL_MYDOCUMENTS, PLUGIN_LOG_PATH);
-        gLog.SetLogLevel(IDebugLog::LogLevel::Message);
+        gLog.SetLogLevel(IDebugLog::LogLevel::Debug);
 
         a_info->infoVersion = PluginInfo::kInfoVersion;
         a_info->name = PLUGIN_NAME;
@@ -56,6 +59,23 @@ namespace SKSE
 
         if (g_messaging->interfaceVersion < MIN_MESSAGING_INTERFACE_VERSION) {
             gLog.FatalError("Messaging interface too old (%d expected %d)", g_messaging->interfaceVersion, MIN_MESSAGING_INTERFACE_VERSION);
+            return false;
+        }
+
+        g_taskInterface = (SKSETaskInterface*)a_skse->QueryInterface(kInterface_Task);
+        if (g_taskInterface == nullptr) {
+            gLog.FatalError("Couldn't get task interface.");
+            return false;
+        }
+
+        if (g_taskInterface->interfaceVersion < 2) {
+            gLog.FatalError("Task interface too old (%d expected %d)", g_taskInterface->interfaceVersion, 2);
+            return false;
+        }
+
+        if (!Hook::InitBranchTrampoline(a_skse, MAX_TRAMPOLINE_BRANCH))
+        {
+            gLog.FatalError("Could not create branch trampoline.");
             return false;
         }
 

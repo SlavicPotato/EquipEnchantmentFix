@@ -38,6 +38,10 @@ extern "C"
         bool ret = Initialize(a_skse);
 
         IAL::Release();
+
+        if (ret)
+            gLog.Message("Done");
+
         gLog.Close();
 
         return ret;
