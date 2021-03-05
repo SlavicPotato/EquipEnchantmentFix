@@ -13,7 +13,6 @@
 #include <ShlObj.h>
 
 #include "plugin.h"
-#include "config.h"
 #include "skse.h"
 #include "eef.h"
 

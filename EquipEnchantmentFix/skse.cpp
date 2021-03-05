@@ -73,7 +73,9 @@ namespace SKSE
             return false;
         }
 
-        if (!Hook::InitBranchTrampoline(a_skse, MAX_TRAMPOLINE_BRANCH))
+        auto iface = static_cast<SKSETrampolineInterface*>(a_skse->QueryInterface(kInterface_Trampoline));
+
+        if (!Hook::InitBranchTrampoline(a_skse, iface, MAX_TRAMPOLINE_BRANCH))
         {
             gLog.FatalError("Could not create branch trampoline.");
             return false;

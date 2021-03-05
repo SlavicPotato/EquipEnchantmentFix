@@ -2,7 +2,31 @@
 
 namespace EEF
 {
+    struct enchantmentEffectID_t
+    {
+        Game::FormID sourceItem;
+        Game::FormID item;
+        Game::FormID mgef;
+    };
+
+    static_assert(sizeof(enchantmentEffectID_t) == 0xC);
+
+    SKMP_FORCEINLINE bool operator==(const enchantmentEffectID_t& a_lhs, const enchantmentEffectID_t& a_rhs) {
+        return a_lhs.sourceItem == a_rhs.sourceItem && a_lhs.item == a_rhs.item && a_lhs.mgef == a_rhs.mgef;
+    }
+
+    SKMP_FORCEINLINE bool operator!=(const enchantmentEffectID_t& a_lhs, const enchantmentEffectID_t& a_rhs) {
+        return a_lhs.sourceItem != a_rhs.sourceItem || a_lhs.item != a_rhs.item || a_lhs.mgef != a_rhs.mgef;
+    }
+}
+
+STD_SPECIALIZE_HASH(::EEF::enchantmentEffectID_t)
+
+namespace EEF
+{
     typedef void(__cdecl* removeActiveEffect_t)(MagicTarget* target, ActiveEffect* effect, uint8_t unk0);
+    typedef void(__cdecl* updateArmorAbility_t)(Actor* a_actor, TESForm* a_form, BaseExtraList* extraData);
+    typedef void(__cdecl* inv_DispelWornItemEnchantsVisitor_t)(Actor* a_actor);
 
     class EnchantmentEnforcerTask :
         public TaskDelegate
@@ -24,7 +48,7 @@ namespace EEF
         }
 
         ICriticalSection m_lock;
-        stl::unordered_set<UInt32> m_data;
+        std::unordered_set<Game::FormID> m_data;
     };
 
     class EEFEventHandler :
@@ -50,6 +74,30 @@ namespace EEF
 
     };
 
+    struct ItemEntry
+    {
+        ItemEntry(
+            TESForm* a_form,
+            BaseExtraList* a_extraList,
+            EnchantmentItem* a_enchantment
+        ) :
+            m_form(a_form),
+            m_extraList(a_extraList),
+            m_enchantment(a_enchantment)
+        {}
+
+        TESForm* m_form;
+        BaseExtraList* m_extraList;
+        EnchantmentItem* m_enchantment;
+    };
+
+    struct EquippedEnchantedItemCollector
+    {
+        bool Accept(InventoryEntryData* a_entryData);
+
+        std::vector<ItemEntry> m_results;
+    };
+
     class MatchForm :
         public FormMatcher
     {
@@ -67,5 +115,25 @@ namespace EEF
 
         TESForm* m_form;
     };
+
+    struct FindItemResult
+    {
+        FindItemResult() : m_match(false) {}
+
+        bool m_match;
+        TESForm* m_form;
+        BaseExtraList* m_extraData;
+    };
+
+    struct FindItemVisitor
+    {
+        FindItemVisitor(TESForm* a_match) : m_match(a_match) {}
+
+        bool Accept(InventoryEntryData* a_entryData);
+
+        TESForm* m_match;
+        FindItemResult m_result;
+    };
+
     bool Initialize();
 }
