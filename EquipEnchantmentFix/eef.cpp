@@ -3,11 +3,15 @@
 namespace EEF
 {
     static EnchantmentEnforcerTask s_eft;
+    static PlayerInvWeightRecalcTask s_wrct;
 
     static bool s_validateOnEffectRemoved;
     static bool s_validateOnLoad;
+    static bool s_doRecalcWeight;
 
-    static bool IsREFRValid(TESObjectREFR* a_refr) 
+    static bool s_triggeredWeightRecalc = false;
+
+    static bool IsREFRValid(TESObjectREFR* a_refr)
     {
         return (!(a_refr->flags & a_refr->kFlagIsDeleted) && !a_refr->IsDead());
     }
@@ -185,13 +189,13 @@ namespace EEF
         if (m_data.empty())
             return;
 
-        for (const auto &e : m_data)
+        for (const auto& e : m_data)
         {
             auto actor = e.Lookup<Actor>();
             if (actor == nullptr)
                 continue;
 
-            PruneDupes(actor);
+            //PruneDupes(actor);
             ProcessActor(actor);
         }
 
@@ -327,15 +331,40 @@ namespace EEF
                 edl->initScriptDispatcher.AddEventSink(handler);
         }
         break;
-        case SKSEMessagingInterface::kMessage_NewGame:
         case SKSEMessagingInterface::kMessage_PreLoadGame:
+
+            if (s_doRecalcWeight)
+                s_triggeredWeightRecalc = false;
+
+        case SKSEMessagingInterface::kMessage_NewGame:
         {
             if (s_validateOnLoad || s_validateOnEffectRemoved)
                 ClearEFTData(true);
+
+            break;
         }
-        break;
+        case SKSEMessagingInterface::kMessage_PostLoadGame:
+
+            if (s_doRecalcWeight)
+                SKSE::g_taskInterface->AddTask(&s_wrct);
+            break;
         }
 
+    }
+
+    void PlayerInvWeightRecalcTask::Run()
+    {
+        auto player = *g_thePlayer;
+        if (!player)
+            return;
+
+        auto containerChanges = static_cast<ExtraContainerChanges*>(player->extraData.GetByType(kExtraData_ContainerChanges));
+        if (!containerChanges || !containerChanges->data)
+            return;
+
+        containerChanges->data->totalWeight = -1.0f;
+
+        s_triggeredWeightRecalc = true;
     }
 
     static removeActiveEffect_t removeActiveEffect_o;
@@ -343,7 +372,7 @@ namespace EEF
 
     static void removeActiveEffect_hook(MagicTarget* target, ActiveEffect* effect, uint8_t unk0)
     {
-       if (effect &&
+        if (effect &&
             effect->sourceItem &&
             effect->sourceItem->formType == TESObjectARMO::kTypeID &&
             effect->target &&
@@ -370,7 +399,7 @@ namespace EEF
 
     static void Inventory_DispelWornItemEnchantsVisitor_hook(Character* a_actor)
     {
-        if(!IsREFRValid(a_actor))
+        if (!IsREFRValid(a_actor))
         {
             inv_DispelWornItemEnchantsVisitor_o(a_actor);
             return;
@@ -394,7 +423,7 @@ namespace EEF
 
         while (effect)
         {
-            if (effect->sourceItem && effect->item && 
+            if (effect->sourceItem && effect->item &&
                 !(effect->flags & effect->kFlag_Dispelled))
             {
                 FindItemVisitor visitor(effect->sourceItem);
@@ -447,9 +476,10 @@ namespace EEF
         if (r != 0)
             gLog.Warning("Unable to load the configuration file, using defaults (%d)", r);
 
-        s_validateOnEffectRemoved = confReader.GetBoolean("EEF", "OnEffectRemoved", true);
-        s_validateOnLoad = confReader.GetBoolean("EEF", "OnActorLoad", true);
-        bool redirectDispelWornItemEnchantsVisitor = confReader.GetBoolean("EEF", "RedirectDispelWornItemEnchantsVisitor", true);
+        s_validateOnEffectRemoved = confReader.Get("EEF", "OnEffectRemoved", true);
+        s_validateOnLoad = confReader.Get("EEF", "OnActorLoad", true);
+        s_doRecalcWeight = confReader.Get("EEF", "RecalcPlayerInventoryWeightOnLoad", false);
+        bool redirectDispelWornItemEnchantsVisitor = confReader.Get("EEF", "RedirectDispelWornItemEnchantsVisitor", true);
 
         if (s_validateOnEffectRemoved) {
             if (!Hook::Call5(removeActiveEffect_addr, uintptr_t(removeActiveEffect_hook), removeActiveEffect_o))

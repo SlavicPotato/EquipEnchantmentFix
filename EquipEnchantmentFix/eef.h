@@ -51,6 +51,16 @@ namespace EEF
         std::unordered_set<Game::FormID> m_data;
     };
 
+    class PlayerInvWeightRecalcTask :
+        public TaskDelegate
+    {
+    public:
+
+        virtual void Run() override;
+        virtual void Dispose() override {};
+
+    };
+
     class EEFEventHandler :
         public BSTEventSink <TESEquipEvent>,
         public BSTEventSink <TESObjectLoadedEvent>,
