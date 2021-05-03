@@ -146,42 +146,6 @@ namespace EEF
             s_eft.m_data.clear();
     }
 
-    static void PruneDupes(Actor* a_actor)
-    {
-        auto effects = a_actor->magicTarget.GetActiveEffects();
-        if (!effects)
-            return;
-
-        UInt32 i = effects->Count();
-
-        if (i == 0)
-            return;
-
-        std::unordered_set<enchantmentEffectID_t> items;
-
-        while (i != 0)
-        {
-            i--;
-
-            auto effect = effects->GetNthItem(i);
-            if (!effect)
-                continue;
-
-            if (!effect->sourceItem || !effect->item || !effect->effect->mgef)
-                continue;
-
-            if (effect->flags & ActiveEffect::kFlag_Dispelled)
-                continue;
-
-            auto r = items.emplace(effect->sourceItem->formID, effect->item->formID, effect->effect->mgef->formID);
-
-            if (!r.second) {
-                //_DMESSAGE(">> %X: dup %X, %X, %X", a_actor->formID, effect->sourceItem->formID, effect->item->formID, effect->effect->mgef->formID);
-                effect->Dispel(false);
-            }
-        }
-    }
-
     void EnchantmentEnforcerTask::Run()
     {
         IScopedCriticalSection _(std::addressof(m_lock));
