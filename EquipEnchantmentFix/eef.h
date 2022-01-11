@@ -42,9 +42,9 @@ namespace EEF
 
 	{
 	protected:
-		virtual EventResult ReceiveEvent(TESEquipEvent* evn, EventDispatcher<TESEquipEvent>* dispatcher) override;
-		virtual EventResult ReceiveEvent(TESObjectLoadedEvent* evn, EventDispatcher<TESObjectLoadedEvent>* dispatcher) override;
-		virtual EventResult ReceiveEvent(TESInitScriptEvent* evn, EventDispatcher<TESInitScriptEvent>* dispatcher) override;
+		virtual EventResult ReceiveEvent(const TESEquipEvent* evn, BSTEventSource<TESEquipEvent>* dispatcher) override;
+		virtual EventResult ReceiveEvent(const TESObjectLoadedEvent* evn, BSTEventSource<TESObjectLoadedEvent>* dispatcher) override;
+		virtual EventResult ReceiveEvent(const TESInitScriptEvent* evn, BSTEventSource<TESInitScriptEvent>* dispatcher) override;
 
 	public:
 		static EEFEventHandler* GetSingleton()
@@ -54,7 +54,7 @@ namespace EEF
 		}
 
 	private:
-		SKMP_FORCEINLINE void HandleEvent(TESEquipEvent* a_evn);
+		SKMP_FORCEINLINE void HandleEvent(const TESEquipEvent* a_evn);
 	};
 
 	struct ItemEntry
@@ -120,9 +120,9 @@ namespace EEF
 		FindItemResult m_result;
 	};
 
-	struct FindEquippedItemVisitor
+	struct EquipItemHookVisitor
 	{
-		FindEquippedItemVisitor(TESForm* a_match) :
+		EquipItemHookVisitor(TESForm* a_match) :
 			m_match(a_match)
 		{
 		}

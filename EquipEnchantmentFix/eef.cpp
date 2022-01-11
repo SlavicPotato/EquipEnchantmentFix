@@ -22,22 +22,14 @@ namespace EEF
 		TESForm* a_form,
 		BaseExtraList* a_extraData)
 	{
-		EnchantmentItem* enchantment = nullptr;
-
 		if (auto extraEnchant = a_extraData->Get<ExtraEnchantment>())
 		{
-			enchantment = extraEnchant->enchant;
+			return extraEnchant->enchant;
 		}
-
-		if (!enchantment)
+		else
 		{
-			if (auto enchantable = RTTI<TESEnchantableForm>()(a_form))
-			{
-				return enchantable->enchantment;
-			}
+			return nullptr;
 		}
-
-		return enchantment;
 	}
 
 	static bool HasItemAbility(
@@ -87,23 +79,28 @@ namespace EEF
 				continue;
 			}
 
-			BSReadLocker locker(std::addressof(extraList->m_lock));
-
-			auto presence = extraList->m_presence;
-			if (!presence)
 			{
-				continue;
-			}
+				BSReadLocker locker(std::addressof(extraList->m_lock));
 
-			if (presence->HasType(ExtraWorn::EXTRA_DATA) ||
-			    presence->HasType(ExtraWornLeft::EXTRA_DATA))
-			{
-				if (auto enchantment = GetEnchantment(a_entryData->type, extraList))
+				auto presence = extraList->m_presence;
+				if (!presence)
 				{
-					m_results.emplace_back(a_entryData->type, extraList, enchantment);
+					continue;
 				}
 
-				break;
+				if (!presence->HasType(ExtraWorn::EXTRA_DATA) &&
+				    !presence->HasType(ExtraWornLeft::EXTRA_DATA))
+				{
+					continue;
+				}
+			}
+
+			if (auto extraEnchant = extraList->Get<ExtraEnchantment>())
+			{
+				if (extraEnchant->enchant)
+				{
+					m_results.emplace_back(a_entryData->type, extraList, extraEnchant->enchant);
+				}
 			}
 		}
 
@@ -125,14 +122,7 @@ namespace EEF
 		if (!extendDataList)
 			return false;
 
-		auto it = extendDataList->Begin();
-
-		if (!it.End())
-		{
-			m_result.m_extraData = *it;
-		}
-
-		for (; !it.End(); ++it)
+		for (auto it = extendDataList->Begin(); !it.End(); ++it)
 		{
 			auto extraList = *it;
 			if (!extraList)
@@ -153,13 +143,14 @@ namespace EEF
 			{
 				m_result.m_match = true;
 				m_result.m_form = a_entryData->type;
+				m_result.m_extraData = extraList;
 			}
 		}
 
 		return false;
 	}
 
-	bool FindEquippedItemVisitor::Accept(InventoryEntryData* a_entryData)
+	bool EquipItemHookVisitor::Accept(InventoryEntryData* a_entryData)
 	{
 		if (!a_entryData || !a_entryData->type)
 			return true;
@@ -174,7 +165,6 @@ namespace EEF
 		}
 
 		m_result.m_match = true;
-		m_result.m_form = a_entryData->type;
 
 		auto it = extendDataList->Begin();
 
@@ -278,7 +268,7 @@ namespace EEF
 		}
 	}
 
-	void EEFEventHandler::HandleEvent(TESEquipEvent* a_evn)
+	void EEFEventHandler::HandleEvent(const TESEquipEvent* a_evn)
 	{
 		if (!a_evn->equipped)
 			return;
@@ -318,7 +308,7 @@ namespace EEF
 			actor->UpdateArmorAbility(visitor.m_result.m_form, visitor.m_result.m_extraData);
 	}
 
-	auto EEFEventHandler::ReceiveEvent(TESEquipEvent* a_evn, EventDispatcher<TESEquipEvent>*)
+	auto EEFEventHandler::ReceiveEvent(const TESEquipEvent* a_evn, BSTEventSource<TESEquipEvent>*)
 		-> EventResult
 	{
 		if (a_evn)
@@ -326,10 +316,10 @@ namespace EEF
 			HandleEvent(a_evn);
 		}
 
-		return kEvent_Continue;
+		return EventResult::kContinue;
 	}
 
-	auto EEFEventHandler::ReceiveEvent(TESObjectLoadedEvent* evn, EventDispatcher<TESObjectLoadedEvent>*)
+	auto EEFEventHandler::ReceiveEvent(const TESObjectLoadedEvent* evn, BSTEventSource<TESObjectLoadedEvent>*)
 		-> EventResult
 	{
 		if (evn && evn->loaded)
@@ -340,10 +330,10 @@ namespace EEF
 			}
 		}
 
-		return kEvent_Continue;
+		return EventResult::kContinue;
 	}
 
-	auto EEFEventHandler::ReceiveEvent(TESInitScriptEvent* evn, EventDispatcher<TESInitScriptEvent>*)
+	auto EEFEventHandler::ReceiveEvent(const TESInitScriptEvent* evn, BSTEventSource<TESInitScriptEvent>*)
 		-> EventResult
 	{
 		if (evn && evn->reference)
@@ -356,7 +346,7 @@ namespace EEF
 			}
 		}
 
-		return kEvent_Continue;
+		return EventResult::kContinue;
 	}
 
 	static void MessageHandler(SKSEMessagingInterface::Message* a_message)
@@ -367,21 +357,20 @@ namespace EEF
 			{
 				if (s_validateOnLoad)
 				{
-					auto edl = GetEventDispatcherList();
 					auto handler = EEFEventHandler::GetSingleton();
 
-					edl->objectLoadedDispatcher.AddEventSink(handler);
+					ScriptEventSourceHolder::GetSingleton()->AddEventSink<TESObjectLoadedEvent>(handler);
 				}
 			}
 			break;
 		case SKSEMessagingInterface::kMessage_DataLoaded:
 			{
-				auto edl = GetEventDispatcherList();
+				auto edl = ScriptEventSourceHolder::GetSingleton();
 				auto handler = EEFEventHandler::GetSingleton();
 
-				edl->equipDispatcher.AddEventSink(handler);
+				edl->AddEventSink<TESEquipEvent>(handler);
 				if (s_validateOnLoad)
-					edl->initScriptDispatcher.AddEventSink(handler);
+					edl->AddEventSink<TESInitScriptEvent>(handler);
 			}
 			break;
 		case SKSEMessagingInterface::kMessage_PreLoadGame:
@@ -550,7 +539,7 @@ namespace EEF
 				    containerChanges->data &&
 				    containerChanges->data->objList)
 				{
-					FindEquippedItemVisitor v(a_form);
+					EquipItemHookVisitor v(a_form);
 					containerChanges->data->objList->Visit(v);
 
 					if (v.m_match && !v.m_result.m_equipped)
