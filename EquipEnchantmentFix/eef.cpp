@@ -37,20 +37,19 @@ namespace EEF
 		TESForm* a_form,
 		EnchantmentItem* a_enchantment)
 	{
-		auto effects = a_actor->magicTarget.GetActiveEffects();
+		auto effects = a_actor->GetActiveEffectList();
 		if (!effects)
 			return false;
 
-		for (auto it = effects->Begin(); !it.End(); ++it)
+		for (auto& effect : *effects)
 		{
-			auto effect = *it;
 			if (!effect)
 			{
 				continue;
 			}
 
-			if (effect->sourceItem == a_form &&
-			    effect->item == a_enchantment)
+			if (effect->source == a_form &&
+			    effect->spell == a_enchantment)
 			{
 				return true;
 			}
@@ -80,7 +79,7 @@ namespace EEF
 			}
 
 			{
-				BSReadLocker locker(std::addressof(extraList->m_lock));
+				BSReadLocker locker(extraList->m_lock);
 
 				auto presence = extraList->m_presence;
 				if (!presence)
@@ -130,7 +129,7 @@ namespace EEF
 				continue;
 			}
 
-			BSReadLocker locker(std::addressof(extraList->m_lock));
+			BSReadLocker locker(extraList->m_lock);
 
 			auto presence = extraList->m_presence;
 			if (!presence)
@@ -181,7 +180,7 @@ namespace EEF
 				continue;
 			}
 
-			BSReadLocker locker(std::addressof(extraList->m_lock));
+			BSReadLocker locker(extraList->m_lock);
 
 			auto presence = extraList->m_presence;
 			if (!presence)
@@ -221,7 +220,7 @@ namespace EEF
 
 	void EnchantmentEnforcerTask::Run()
 	{
-		IScopedLock lock(m_lock);
+		stl::scoped_lock lock(m_lock);
 
 		if (m_data.empty())
 			return;
@@ -434,23 +433,22 @@ namespace EEF
 
 		ScheduleEFT(a_actor);
 
-		auto effects = a_actor->magicTarget.GetActiveEffects();
+		auto effects = a_actor->GetActiveEffectList();
 		if (!effects)
 			return true;
 
-		for (auto it = effects->Begin(); !it.End(); ++it)
+		for (auto& effect : *effects)
 		{
-			auto effect = *it;
 			if (!effect)
 			{
 				continue;
 			}
 
-			if (effect->sourceItem &&
-			    effect->item &&
-			    !(effect->flags & effect->kFlag_Dispelled))
+			if (effect->source &&
+			    effect->spell &&
+			    !(effect->flags.test(ActiveEffect::Flag::kDispelled)))
 			{
-				FindEquippedArmorItemVisitor visitor(effect->sourceItem);
+				FindEquippedArmorItemVisitor visitor(effect->source);
 				containerChanges->data->objList->Visit(visitor);
 
 				if (!visitor.m_result.m_match)
@@ -483,13 +481,35 @@ namespace EEF
 
 	updateArmorAbility_t updateArmorAbility_o;
 
+	static EnchantmentItem* GetEnchantmentWithBase(
+		TESForm* a_form,
+		BaseExtraList* a_extraData)
+	{
+		EnchantmentItem* enchantment = nullptr;
+
+		if (auto extraEnchant = a_extraData->Get<ExtraEnchantment>())
+		{
+			enchantment = extraEnchant->enchant;
+		}
+
+		if (!enchantment)
+		{
+			if (auto enchantable = RTTI<TESEnchantableForm>()(a_form))
+			{
+				return enchantable->formEnchanting;
+			}
+		}
+
+		return enchantment;
+	}
+
 	static void UpdateArmorAbility_Hook1(Actor* a_actor, TESForm* a_form, BaseExtraList* a_extraData)
 	{
 		if (a_actor && a_form && a_extraData)
 		{
 			if (a_form->formType == TESObjectARMO::kTypeID)
 			{
-				if (auto enchantment = GetEnchantment(a_form, a_extraData))
+				if (auto enchantment = GetEnchantmentWithBase(a_form, a_extraData))
 				{
 					if (HasItemAbility(a_actor, a_form, enchantment))
 					{
@@ -565,26 +585,23 @@ namespace EEF
 
 	bool Initialize()
 	{
-		INIReader confReader;
+		INIConfReader confReader(PLUGIN_INI_FILE_NOEXT);
 
-		confReader.Load(PLUGIN_INI_FILE);
-
-		int r = confReader.ParseError();
-		if (r != 0)
+		if (!confReader.is_loaded())
 		{
-			gLog.Warning("Unable to load the configuration file, using defaults (%d)", r);
+			gLog.Warning("Unable to load the configuration file, using defaults");
 		}
 
-		s_validateOnLoad = confReader.Get("EEF", "OnActorLoad", true);
-		s_doRecalcWeight = confReader.Get("EEF", "RecalcPlayerInventoryWeightOnLoad", false);
-		bool redirectDispelWornItemEnchantsVisitor = confReader.Get("EEF", "RedirectDispelWornItemEnchantsVisitor", true);
-		bool equipManagerHook = confReader.Get("EEF", "ScriptEquipEventFix", false);
+		s_validateOnLoad = confReader.GetBoolValue("EEF", "OnActorLoad", true);
+		s_doRecalcWeight = confReader.GetBoolValue("EEF", "RecalcPlayerInventoryWeightOnLoad", false);
+		bool redirectDispelWornItemEnchantsVisitor = confReader.GetBoolValue("EEF", "RedirectDispelWornItemEnchantsVisitor", true);
+		bool equipManagerHook = confReader.GetBoolValue("EEF", "ScriptEquipEventFix", false);
 
 		auto& branchTrampoline = ISKSE::GetBranchTrampoline();
 
 		if (redirectDispelWornItemEnchantsVisitor)
 		{
-			if (!Hook::Call5(
+			if (!hook::call5(
 					branchTrampoline,
 					inv_DispelWornItemEnchantsVisitor_addr,
 					std::uintptr_t(Inventory_DispelWornItemEnchantsVisitor_inv_Hook),
@@ -593,7 +610,7 @@ namespace EEF
 				gLog.Error("DispelWornItemEnchantsVisitor (inventory) failed");
 			}
 
-			if (!Hook::Call5(
+			if (!hook::call5(
 					branchTrampoline,
 					addrem_DispelWornItemEnchantsVisitor_addr,
 					std::uintptr_t(Inventory_DispelWornItemEnchantsVisitor_addrem_Hook),
@@ -602,7 +619,7 @@ namespace EEF
 				gLog.Error("DispelWornItemEnchantsVisitor (add/remove) failed");
 			}
 
-			if (!Hook::Call5(
+			if (!hook::call5(
 					branchTrampoline,
 					updateArmorAbility1_addr,
 					uintptr_t(UpdateArmorAbility_Hook1),
@@ -610,6 +627,8 @@ namespace EEF
 			{
 				gLog.Error("UpdateArmorAbility hook failed");
 			}
+
+			gLog.Message("RedirectDispelWornItemEnchantsVisitor ON");
 		}
 
 		if (equipManagerHook)

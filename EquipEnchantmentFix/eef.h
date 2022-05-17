@@ -19,11 +19,11 @@ namespace EEF
 
 		inline bool Add(Game::ObjectRefHandle a_handle)
 		{
-			IScopedLock lock(m_lock);
+			stl::scoped_lock lock(m_lock);
 			return m_data.emplace(a_handle).second;
 		}
 
-		WCriticalSection m_lock;
+		stl::critical_section m_lock;
 		std::unordered_set<Game::ObjectRefHandle> m_data;
 	};
 
