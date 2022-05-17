@@ -487,9 +487,12 @@ namespace EEF
 	{
 		EnchantmentItem* enchantment = nullptr;
 
-		if (auto extraEnchant = a_extraData->Get<ExtraEnchantment>())
+		if (a_extraData)
 		{
-			enchantment = extraEnchant->enchant;
+			if (auto extraEnchant = a_extraData->Get<ExtraEnchantment>())
+			{
+				enchantment = extraEnchant->enchant;
+			}
 		}
 
 		if (!enchantment)
@@ -505,7 +508,7 @@ namespace EEF
 
 	static void UpdateArmorAbility_Hook1(Actor* a_actor, TESForm* a_form, BaseExtraList* a_extraData)
 	{
-		if (a_actor && a_form && a_extraData)
+		if (a_actor && a_form)
 		{
 			if (a_form->formType == TESObjectARMO::kTypeID)
 			{
